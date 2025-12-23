@@ -483,11 +483,11 @@ const systemPage = (
         <ObservabilityTraces />
       </FeatureGatedContent>
     </EntityLayout.Route>
-    <EntityLayout.Route path="/rca-reports" title="RCA Reports">
+    {/* <EntityLayout.Route path="/rca-reports" title="RCA Reports">
       <FeatureGatedContent feature="observability">
         <ObservabilityRCA />
       </FeatureGatedContent>
-    </EntityLayout.Route>
+    </EntityLayout.Route> */}
   </EntityLayout>
 );
 
