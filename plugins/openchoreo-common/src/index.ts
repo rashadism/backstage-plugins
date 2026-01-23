@@ -63,6 +63,7 @@ export type { OpenChoreoFeatures, FeatureName } from './types/features';
 export type {
   OpenChoreoComponents,
   ObservabilityComponents,
+  AIRCAAgentComponents,
 } from '@openchoreo/openchoreo-client-node';
 
 // Export commonly used type aliases for convenience
