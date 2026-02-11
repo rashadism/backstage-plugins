@@ -418,11 +418,21 @@ components:
     ChatRequest:
       type: object
       required:
+        - namespaceName
+        - environmentName
         - reportId
         - projectUid
         - environmentUid
         - messages
       properties:
+        namespaceName:
+          type: string
+          description: The namespace name
+          example: 'my-namespace'
+        environmentName:
+          type: string
+          description: The environment name
+          example: 'development'
         reportId:
           type: string
           description: The ID of the RCA report to chat about
@@ -437,6 +447,10 @@ components:
           format: uuid
           description: The project UUID
           example: '1c4e7a9b-3f6d-4e2a-8b5c-7d9f1e3a4c6b'
+        projectName:
+          type: string
+          description: The project name
+          example: 'my-project'
         environmentUid:
           type: string
           format: uuid

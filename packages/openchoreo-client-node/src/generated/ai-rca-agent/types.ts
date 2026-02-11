@@ -218,6 +218,16 @@ export interface components {
     };
     ChatRequest: {
       /**
+       * @description The namespace name
+       * @example my-namespace
+       */
+      namespaceName: string;
+      /**
+       * @description The environment name
+       * @example development
+       */
+      environmentName: string;
+      /**
        * @description The ID of the RCA report to chat about
        * @example alert-789_1704067200
        */
@@ -233,6 +243,11 @@ export interface components {
        * @example 1c4e7a9b-3f6d-4e2a-8b5c-7d9f1e3a4c6b
        */
       projectUid: string;
+      /**
+       * @description The project name
+       * @example my-project
+       */
+      projectName?: string;
       /**
        * Format: uuid
        * @description The environment UUID

@@ -14,6 +14,7 @@ export interface ChatRequest {
   environmentName: string;
   reportId: string;
   projectUid: string;
+  projectName?: string;
   environmentUid: string;
   componentUid?: string;
   messages: ChatMessage[];

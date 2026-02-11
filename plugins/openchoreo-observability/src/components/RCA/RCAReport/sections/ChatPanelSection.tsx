@@ -91,6 +91,7 @@ interface ChatContext {
   environmentName: string;
   environmentUid: string;
   projectUid: string;
+  projectName: string;
   rcaAgentApi: RCAAgentApi;
 }
 
@@ -188,6 +189,7 @@ export const ChatPanelSection = ({ reportId, chatContext }: ChatPanelProps) => {
           environmentName: chatContext.environmentName,
           reportId: reportId || '',
           projectUid: chatContext.projectUid,
+          projectName: chatContext.projectName,
           environmentUid: chatContext.environmentUid,
           messages: updatedMessages,
         },

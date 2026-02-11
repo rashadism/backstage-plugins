@@ -34,6 +34,7 @@ interface ChatContext {
   environmentName: string;
   environmentUid: string;
   projectUid: string;
+  projectName: string;
   rcaAgentApi: RCAAgentApi;
 }
 

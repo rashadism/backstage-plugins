@@ -37,6 +37,7 @@ export const RCAReport = () => {
     environmentName: environment?.name || '',
     environmentUid: environment?.uid || '',
     projectUid: detailedReport?.projectUid || '',
+    projectName: entity.metadata.name,
     rcaAgentApi,
   };
 
