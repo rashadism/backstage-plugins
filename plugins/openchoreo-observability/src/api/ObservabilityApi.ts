@@ -61,34 +61,24 @@ export interface ObservabilityApi {
   }>;
 
   getRCAReports(
-    projectId: string,
-    environmentId: string,
-    environmentName: string,
     namespaceName: string,
+    environmentName: string,
     projectName: string,
-    componentUids: string[],
     options?: {
       startTime?: string;
       endTime?: string;
-      status?: 'pending' | 'completed' | 'failed';
       limit?: number;
+      status?: 'pending' | 'completed' | 'failed';
     },
   ): Promise<{
     reports: RCAReportSummary[];
     totalCount?: number;
-    tookMs?: number;
   }>;
 
-  getRCAReportByAlert(
-    alertId: string,
-    projectId: string,
-    environmentId: string,
+  getRCAReport(
+    reportId: string,
     environmentName: string,
     namespaceName: string,
-    projectName: string,
-    options?: {
-      version?: number;
-    },
   ): Promise<RCAReportDetailed>;
 }
 
@@ -249,22 +239,18 @@ export class ObservabilityClient implements ObservabilityApi {
   }
 
   async getRCAReports(
-    projectId: string,
-    environmentId: string,
-    environmentName: string,
     namespaceName: string,
+    environmentName: string,
     projectName: string,
-    componentUids: string[],
     options?: {
       startTime?: string;
       endTime?: string;
-      status?: 'pending' | 'completed' | 'failed';
       limit?: number;
+      status?: 'pending' | 'completed' | 'failed';
     },
   ): Promise<{
     reports: RCAReportSummary[];
     totalCount?: number;
-    tookMs?: number;
   }> {
     const baseUrl = await this.discoveryApi.getBaseUrl(
       'openchoreo-observability-backend',
@@ -272,12 +258,9 @@ export class ObservabilityClient implements ObservabilityApi {
     const response = await this.fetchApi.fetch(`${baseUrl}/rca-reports`, {
       method: 'POST',
       body: JSON.stringify({
-        projectId,
-        environmentId,
-        environmentName,
         namespaceName,
+        environmentName,
         projectName,
-        componentUids,
         options,
       }),
       headers: {
@@ -311,35 +294,24 @@ export class ObservabilityClient implements ObservabilityApi {
     return {
       reports: data.reports || [],
       totalCount: data.totalCount,
-      tookMs: data.tookMs,
     };
   }
 
-  async getRCAReportByAlert(
-    alertId: string,
-    projectId: string,
-    environmentId: string,
+  async getRCAReport(
+    reportId: string,
     environmentName: string,
     namespaceName: string,
-    projectName: string,
-    options?: {
-      version?: number;
-    },
   ): Promise<RCAReportDetailed> {
     const baseUrl = await this.discoveryApi.getBaseUrl(
       'openchoreo-observability-backend',
     );
     const response = await this.fetchApi.fetch(
-      `${baseUrl}/rca-reports/alert/${alertId}`,
+      `${baseUrl}/rca-reports/${encodeURIComponent(reportId)}`,
       {
         method: 'POST',
         body: JSON.stringify({
-          projectId,
-          environmentId,
-          environmentName,
           namespaceName,
-          projectName,
-          options,
+          environmentName,
         }),
         headers: {
           'Content-Type': 'application/json',

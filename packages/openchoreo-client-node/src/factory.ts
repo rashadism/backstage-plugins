@@ -256,11 +256,12 @@ export function createOpenChoreoObservabilityApiClient(
  *   token: 'your-auth-token'
  * });
  *
- * const response = await client.POST('/chat', {
+ * const response = await client.POST('/api/v1alpha1/rca-agent/chat', {
  *   body: {
  *     reportId: 'alert-789_1704067200',
- *     projectUid: '1c4e7a9b-3f6d-4e2a-8b5c-7d9f1e3a4c6b',
- *     environmentUid: '2f5a8c1e-7d9b-4e3f-6a4c-8e1f2d7a9b5c',
+ *     namespace: 'my-namespace',
+ *     project: 'my-project',
+ *     environment: 'development',
  *     messages: [{ role: 'user', content: 'What caused this issue?' }]
  *   }
  * });

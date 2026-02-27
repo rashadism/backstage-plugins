@@ -6,8 +6,12 @@ import {
 import type { AIRCAAgentComponents } from '@openchoreo/backstage-plugin-common';
 
 // Re-export types from generated client
-export type ChatMessage = AIRCAAgentComponents['schemas']['ChatMessage'];
 export type StreamEvent = AIRCAAgentComponents['schemas']['StreamEvent'];
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export interface ChatRoutingContext {
   namespaceName: string;
@@ -16,11 +20,10 @@ export interface ChatRoutingContext {
 
 export interface ChatRequest {
   reportId: string;
-  projectUid: string;
-  environmentUid: string;
-  componentUid?: string;
+  namespace: string;
+  project: string;
+  environment: string;
   messages: ChatMessage[];
-  version?: number;
 }
 
 export interface RCAAgentApi {

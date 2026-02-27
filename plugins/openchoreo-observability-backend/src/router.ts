@@ -167,12 +167,10 @@ export async function createRouter({
     }
     const userToken = getUserTokenFromRequest(_req);
     try {
-      const reports = await rcaAgentService.fetchRCAReportsByProject(
+      const reports = await rcaAgentService.fetchRCAReports(
         _req.body.namespaceName,
         _req.body.environmentName,
-        _req.body.projectId,
-        _req.body.environmentId,
-        _req.body.componentUids || [],
+        _req.body.projectName,
         _req.body.options,
         userToken,
       );
@@ -192,20 +190,19 @@ export async function createRouter({
     }
   });
 
-  router.post('/rca-reports/alert/:alertId', async (_req, res) => {
+  router.post('/rca-reports/:reportId', async (_req, res) => {
     // Only enforce user auth when auth feature is enabled
     if (authEnabled) {
       await httpAuth.credentials(_req, { allow: ['user'] });
     }
     const userToken = getUserTokenFromRequest(_req);
-    const { alertId } = _req.params;
+    const { reportId } = _req.params;
 
     try {
-      const report = await rcaAgentService.fetchRCAReportByAlert(
+      const report = await rcaAgentService.fetchRCAReport(
         _req.body.namespaceName,
         _req.body.environmentName,
-        alertId,
-        _req.body.options,
+        reportId,
         userToken,
       );
       return res.status(200).json(report);
@@ -234,24 +231,24 @@ export async function createRouter({
       namespaceName,
       environmentName,
       reportId,
-      projectUid,
-      environmentUid,
-      componentUid,
+      namespace,
+      project,
+      environment,
       messages,
-      version,
     } = _req.body;
 
     if (
       !namespaceName ||
       !environmentName ||
       !reportId ||
-      !projectUid ||
-      !environmentUid ||
+      !namespace ||
+      !project ||
+      !environment ||
       !messages
     ) {
       res.status(400).json({
         error:
-          'Missing required fields: namespaceName, environmentName, reportId, projectUid, environmentUid, messages',
+          'Missing required fields: namespaceName, environmentName, reportId, namespace, project, environment, messages',
       });
       return;
     }
@@ -263,11 +260,10 @@ export async function createRouter({
         environmentName,
         {
           reportId,
-          projectUid,
-          environmentUid,
-          componentUid,
+          namespace,
+          project,
+          environment,
           messages,
-          version,
         },
         userToken,
       );

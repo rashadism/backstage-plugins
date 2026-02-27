@@ -136,10 +136,10 @@ export class RCAAgentService {
     );
 
     this.logger.debug(
-      `Sending chat request to RCA agent at ${rcaAgentUrl}/api/v1/agent/chat`,
+      `Sending chat request to RCA agent at ${rcaAgentUrl}/api/v1alpha1/rca-agent/chat`,
     );
 
-    const response = await fetch(`${rcaAgentUrl}/api/v1/agent/chat`, {
+    const response = await fetch(`${rcaAgentUrl}/api/v1alpha1/rca-agent/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -152,39 +152,37 @@ export class RCAAgentService {
   }
 
   /**
-   * Fetches RCA reports for a specific project from the RCA Agent service.
+   * Fetches RCA reports from the RCA Agent service.
    *
    * @param namespaceName - The namespace name
    * @param environmentName - The environment name
-   * @param projectId - The project UUID
-   * @param environmentId - The environment UUID
-   * @param componentUids - Array of component UIDs to filter reports (optional)
+   * @param projectName - The project name
    * @param options - Parameters for filtering reports
    * @param options.startTime - The start time of the reports (required)
    * @param options.endTime - The end time of the reports (required)
-   * @param options.status - Filter by report status (pending/completed/failed) (optional)
    * @param options.limit - The maximum number of reports to return (optional)
+   * @param options.sort - Sort order by timestamp (asc/desc) (optional)
+   * @param options.status - Filter by report status (pending/completed/failed) (optional)
    * @param userToken - Optional user token for authentication
    * @returns Promise with RCA reports data
    */
-  async fetchRCAReportsByProject(
+  async fetchRCAReports(
     namespaceName: string,
     environmentName: string,
-    projectId: string,
-    environmentId: string,
-    componentUids: string[],
+    projectName: string,
     options: {
       startTime: string;
       endTime: string;
-      status?: 'pending' | 'completed' | 'failed';
       limit?: number;
+      sort?: 'asc' | 'desc';
+      status?: 'pending' | 'completed' | 'failed';
     },
     userToken?: string,
   ): Promise<RCAReportsResponse> {
     const startTime = Date.now();
     try {
       this.logger.debug(
-        `Fetching RCA reports for project ${projectId} in environment ${environmentName}`,
+        `Fetching RCA reports for project ${projectName} in environment ${environmentName}`,
       );
 
       const client = await this.createClient(
@@ -194,22 +192,22 @@ export class RCAAgentService {
       );
 
       this.logger.debug(
-        `Sending RCA reports request to /api/v1/rca-reports/projects/${projectId}`,
+        `Sending RCA reports request to /api/v1/rca-agent/reports`,
       );
 
       const { data, error, response } = await client.GET(
-        '/api/v1/rca-reports/projects/{projectId}',
+        '/api/v1/rca-agent/reports',
         {
           params: {
-            path: { projectId },
             query: {
-              environmentUid: environmentId,
+              project: projectName,
+              environment: environmentName,
+              namespace: namespaceName,
               startTime: options.startTime,
               endTime: options.endTime,
-              componentUids:
-                componentUids.length > 0 ? componentUids : undefined,
-              status: options.status,
               limit: options.limit,
+              sort: options.sort,
+              status: options.status,
             },
           },
         },
@@ -220,31 +218,30 @@ export class RCAAgentService {
           ? JSON.stringify(error)
           : `HTTP ${response.status} ${response.statusText}`;
         this.logger.error(
-          `Failed to fetch RCA reports for project ${projectId}: ${errorMessage}`,
+          `Failed to fetch RCA reports for project ${projectName}: ${errorMessage}`,
         );
         throw new Error(`Failed to fetch RCA reports: ${errorMessage}`);
       }
 
       this.logger.debug(
-        `Successfully fetched RCA reports for project ${projectId}: ${
+        `Successfully fetched RCA reports for project ${projectName}: ${
           data?.reports?.length || 0
         } reports`,
       );
 
       const totalTime = Date.now() - startTime;
       this.logger.debug(
-        `RCA reports fetch completed for project ${projectId} (${totalTime}ms)`,
+        `RCA reports fetch completed for project ${projectName} (${totalTime}ms)`,
       );
 
       return {
         reports: data?.reports || [],
         totalCount: data?.totalCount || 0,
-        tookMs: data?.tookMs || 0,
       };
     } catch (error: unknown) {
       const totalTime = Date.now() - startTime;
       this.logger.error(
-        `Error fetching RCA reports for project ${projectId} (${totalTime}ms):`,
+        `Error fetching RCA reports for project ${projectName} (${totalTime}ms):`,
         error as Error,
       );
       throw error;
@@ -252,29 +249,24 @@ export class RCAAgentService {
   }
 
   /**
-   * Fetches a single RCA report by alert ID from the RCA Agent service.
+   * Fetches a single RCA report by report ID from the RCA Agent service.
    *
    * @param namespaceName - The namespace name
    * @param environmentName - The environment name
-   * @param alertId - The ID of the alert
-   * @param options - Optional parameters
-   * @param options.version - Specific version number of the report to retrieve
+   * @param reportId - The ID of the report
    * @param userToken - Optional user token for authentication
    * @returns Promise with RCA report details
    */
-  async fetchRCAReportByAlert(
+  async fetchRCAReport(
     namespaceName: string,
     environmentName: string,
-    alertId: string,
-    options?: {
-      version?: number;
-    },
+    reportId: string,
     userToken?: string,
   ): Promise<RCAReportDetailed> {
     const startTime = Date.now();
     try {
       this.logger.debug(
-        `Fetching RCA report for alert ${alertId} in environment ${environmentName}`,
+        `Fetching RCA report ${reportId} in environment ${environmentName}`,
       );
 
       const client = await this.createClient(
@@ -284,17 +276,14 @@ export class RCAAgentService {
       );
 
       this.logger.debug(
-        `Sending RCA report request to /api/v1/rca-reports/alerts/${alertId}${
-          options?.version ? `?version=${options.version}` : ''
-        }`,
+        `Sending RCA report request to /api/v1/rca-agent/reports/${reportId}`,
       );
 
       const { data, error, response } = await client.GET(
-        '/api/v1/rca-reports/alerts/{alertId}',
+        '/api/v1/rca-agent/reports/{report_id}',
         {
           params: {
-            path: { alertId },
-            query: options?.version ? { version: options.version } : {},
+            path: { report_id: reportId },
           },
         },
       );
@@ -304,23 +293,23 @@ export class RCAAgentService {
           ? JSON.stringify(error)
           : `HTTP ${response.status} ${response.statusText}`;
         this.logger.error(
-          `Failed to fetch RCA report for alert ${alertId}: ${errorMessage}`,
+          `Failed to fetch RCA report ${reportId}: ${errorMessage}`,
         );
         throw new Error(`Failed to fetch RCA report: ${errorMessage}`);
       }
 
-      this.logger.debug(`Successfully fetched RCA report for alert ${alertId}`);
+      this.logger.debug(`Successfully fetched RCA report ${reportId}`);
 
       const totalTime = Date.now() - startTime;
       this.logger.debug(
-        `RCA report fetch completed for alert ${alertId} (${totalTime}ms)`,
+        `RCA report fetch completed for ${reportId} (${totalTime}ms)`,
       );
 
       return data;
     } catch (error: unknown) {
       const totalTime = Date.now() - startTime;
       this.logger.error(
-        `Error fetching RCA report for alert ${alertId} (${totalTime}ms):`,
+        `Error fetching RCA report ${reportId} (${totalTime}ms):`,
         error as Error,
       );
       throw error;

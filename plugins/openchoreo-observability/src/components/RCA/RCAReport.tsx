@@ -14,12 +14,13 @@ import { useApi } from '@backstage/core-plugin-api';
 import { rcaAgentApiRef } from '../../api/RCAAgentApi';
 
 export const RCAReport = () => {
-  const { alertId } = useParams<{ alertId: string }>();
+  const { reportId } = useParams<{ reportId: string }>();
   const navigate = useNavigate();
   const { entity } = useEntity();
   const { filters } = useFilters();
   const rcaAgentApi = useApi(rcaAgentApiRef);
   const namespace = entity.metadata.annotations?.[CHOREO_ANNOTATIONS.NAMESPACE];
+  const projectName = entity.metadata.name as string;
 
   // Get environments to ensure we have environment data
   const { environments } = useGetEnvironmentsByNamespace(namespace);
@@ -29,14 +30,13 @@ export const RCAReport = () => {
     report: detailedReport,
     loading,
     error,
-  } = useRCAReportByAlert(alertId, environment?.uid, environment?.name, entity);
+  } = useRCAReportByAlert(reportId, environment?.name, entity);
 
   // Chat context for RCAReportView
   const chatContext = {
     namespaceName: namespace || '',
     environmentName: environment?.name || '',
-    environmentUid: environment?.uid || '',
-    projectUid: detailedReport?.projectUid || '',
+    projectName: projectName || '',
     rcaAgentApi,
   };
 
@@ -44,10 +44,10 @@ export const RCAReport = () => {
     return <Progress />;
   }
 
-  if (!alertId) {
+  if (!reportId) {
     return (
       <Alert severity="error">
-        <Typography variant="body1">Alert ID is required</Typography>
+        <Typography variant="body1">Report ID is required</Typography>
       </Alert>
     );
   }
@@ -84,7 +84,7 @@ export const RCAReport = () => {
   return (
     <RCAReportView
       report={detailedReport}
-      alertId={alertId}
+      reportId={reportId}
       onBack={handleBack}
       chatContext={chatContext}
     />
