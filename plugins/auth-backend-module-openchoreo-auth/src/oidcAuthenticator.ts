@@ -13,6 +13,8 @@ import {
   decodeJwtUnsafe,
   isTokenExpired,
   getTimeUntilExpiry,
+  verifyAndDecodeJwt,
+  deriveJwksUrl,
 } from './jwtUtils';
 import syncFetch from 'sync-fetch';
 
@@ -26,10 +28,14 @@ interface OIDCDiscoveryConfig {
   token_endpoint: string;
   userinfo_endpoint?: string;
   issuer?: string;
+  jwks_uri?: string;
 }
 
 // Cache for OIDC discovery results
 let discoveryCache: OIDCDiscoveryConfig | null = null;
+
+// Trusted JWKS URL resolved during initialize() from config/discovery
+let trustedJwksUrl: string | null = null;
 
 /**
  * Fetches OIDC discovery configuration from a metadata URL (synchronous with caching).
@@ -179,6 +185,9 @@ export const openChoreoAuthenticator = createOAuthAuthenticator({
       );
     }
 
+    // Store trusted JWKS URL from discovery or derived from tokenURL
+    trustedJwksUrl = discoveryCache?.jwks_uri ?? deriveJwksUrl(tokenURL);
+
     const strategy = new OAuth2Strategy(
       {
         clientID,
@@ -252,6 +261,20 @@ export const openChoreoAuthenticator = createOAuthAuthenticator({
       // If token is expired or about to expire (less than 60 seconds), fail the refresh
       if (isTokenExpired(payload, 60)) {
         throw new Error('Access token expired, re-authentication required');
+      }
+
+      // Verify token signature against current JWKS
+      // This catches stale tokens from a recreated IDP instance
+      // Uses trusted JWKS URL from config/discovery, not the unverified token payload
+      try {
+        if (!trustedJwksUrl) {
+          throw new Error('JWKS URL not configured');
+        }
+        await verifyAndDecodeJwt(accessToken, trustedJwksUrl);
+      } catch {
+        throw new Error(
+          'Access token signature verification failed, re-authentication required',
+        );
       }
 
       const timeUntilExpiry = getTimeUntilExpiry(payload);
