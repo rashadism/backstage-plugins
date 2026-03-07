@@ -105,6 +105,29 @@ export interface ObservabilityApi {
     environmentName: string,
     namespaceName: string,
   ): Promise<RCAReportDetailed>;
+
+  getIncidents(
+    namespaceName: string,
+    projectName: string,
+    environmentName: string,
+    componentName: string,
+    options?: {
+      startTime?: string;
+      endTime?: string;
+      limit?: number;
+      sort?: 'asc' | 'desc';
+    },
+  ): Promise<{
+    incidents: Array<{
+      incidentId: string;
+      alertId: string;
+      status: 'triggered' | 'acknowledged' | 'resolved';
+      description?: string;
+      triggeredAt?: string;
+      resolvedAt?: string;
+    }>;
+    total: number;
+  }>;
 }
 
 export const observabilityApiRef = createApiRef<ObservabilityApi>({
@@ -490,6 +513,78 @@ export class ObservabilityClient implements ObservabilityApi {
 
     const data = await response.json();
     return data;
+  }
+
+  async getIncidents(
+    namespaceName: string,
+    projectName: string,
+    environmentName: string,
+    componentName: string,
+    options?: {
+      startTime?: string;
+      endTime?: string;
+      limit?: number;
+      sort?: 'asc' | 'desc';
+    },
+  ): Promise<{
+    incidents: Array<{
+      incidentId: string;
+      alertId: string;
+      status: 'triggered' | 'acknowledged' | 'resolved';
+      description?: string;
+      triggeredAt?: string;
+      resolvedAt?: string;
+    }>;
+    total: number;
+  }> {
+    const { observerUrl } = await this.urlCache.resolveUrls(
+      namespaceName,
+      environmentName,
+    );
+
+    const response = await this.fetchApi.fetch(
+      `${observerUrl}/api/v1alpha1/incidents/query`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...DIRECT_HEADER },
+        body: JSON.stringify({
+          startTime:
+            options?.startTime ?? new Date(Date.now() - 3600000).toISOString(),
+          endTime: options?.endTime ?? new Date().toISOString(),
+          limit: options?.limit ?? 100,
+          sort: options?.sort ?? 'desc',
+          searchScope: {
+            namespace: namespaceName,
+            project: projectName,
+            component: componentName,
+            environment: environmentName,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      if (error.includes('Observability is not configured for component')) {
+        throw new Error('Observability is not enabled for this component');
+      }
+      throw new Error(
+        error || `Failed to fetch incidents: ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    return {
+      incidents: (data.incidents ?? []).map((i: any) => ({
+        incidentId: i.incidentId ?? '',
+        alertId: i.alertId ?? '',
+        status: i.status ?? 'triggered',
+        description: i.description,
+        triggeredAt: i.triggeredAt,
+        resolvedAt: i.resolvedAt,
+      })),
+      total: data.total ?? 0,
+    };
   }
 
   async getRuntimeLogs(
