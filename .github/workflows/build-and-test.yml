@@ -163,8 +163,8 @@ jobs:
 
   publish:
     name: Publish
-    runs-on: ubuntu-24.04
-    if: github.event_name == 'push'
+    runs-on: ${{ vars.PUBLISH_RUNNER || 'ubuntu-24.04' }}
+    if: github.event_name == 'push' && vars.PUBLISH_ENABLED != 'false'
     needs: [lint, audit, test, build]
     permissions:
       packages: write
