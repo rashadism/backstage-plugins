@@ -23,6 +23,7 @@ permissions:
 env:
   OCI_REGISTRY_HOST: ${{ vars.OCI_REGISTRY_HOST || 'ghcr.io' }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME || 'openchoreo/openchoreo-ui' }}
+  NODE_OPTIONS: ${{ vars.NODE_OPTIONS }}
 
 jobs:
   lint:
@@ -100,6 +101,7 @@ jobs:
         run: yarn test:all --silent
 
       - name: Upload coverage to Codecov
+        if: vars.CODECOV_ENABLED != 'false'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/lcov.info

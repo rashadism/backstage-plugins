@@ -11,6 +11,7 @@ permissions:
 env:
   OCI_REGISTRY_HOST: ${{ vars.OCI_REGISTRY_HOST || 'ghcr.io' }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME || 'openchoreo/openchoreo-ui' }}
+  NODE_OPTIONS: ${{ vars.NODE_OPTIONS }}
 
 jobs:
   release:
