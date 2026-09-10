@@ -23,6 +23,9 @@ permissions:
 env:
   OCI_REGISTRY_HOST: ${{ vars.OCI_REGISTRY_HOST || 'ghcr.io' }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME || 'openchoreo/openchoreo-ui' }}
+  IMAGE_PLATFORMS: ${{ vars.IMAGE_PLATFORMS || 'linux/amd64,linux/arm64' }}
+  DOCKER_PROVENANCE: ${{ vars.DOCKER_PROVENANCE || 'false' }}
+  DOCKER_SBOM: ${{ vars.DOCKER_SBOM || 'false' }}
 
 jobs:
   lint:
@@ -100,6 +103,7 @@ jobs:
         run: yarn test:all --silent
 
       - name: Upload coverage to Codecov
+        if: vars.CODECOV_ENABLED != 'false'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/lcov.info
@@ -163,7 +167,7 @@ jobs:
 
   publish:
     name: Publish
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.PUBLISH_RUNNER || 'ubuntu-24.04' }}
     if: github.event_name == 'push'
     needs: [lint, audit, test, build]
     permissions:
@@ -211,7 +215,9 @@ jobs:
         with:
           push: true
           file: ./packages/backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.IMAGE_PLATFORMS }}
           tags: ${{ steps.tag.outputs.TAGS }}
+          provenance: ${{ env.DOCKER_PROVENANCE }}
+          sbom: ${{ env.DOCKER_SBOM }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
