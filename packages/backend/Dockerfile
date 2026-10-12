@@ -14,7 +14,8 @@ ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs22-debian13:nonroot@sha256:939d6f16715
 FROM ${BUILD_IMAGE} AS build
 
 ENV PYTHON=/usr/bin/python3 \
-    JOBS=max
+    JOBS=max \
+    NODE_OPTIONS=--max-old-space-size=6144
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
