@@ -58,7 +58,7 @@ jobs:
         with:
           push: true
           file: ./packages/backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: ${{ steps.tag.outputs.TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
