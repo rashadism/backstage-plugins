@@ -143,6 +143,10 @@ jobs:
     strategy:
       matrix:
         node-version: [22]
+    env:
+      # Standard GitHub-hosted runners OOM on this monorepo's tsc/build steps
+      # at V8's default heap limit; raise it within the runner's ~7GB RAM.
+      NODE_OPTIONS: --max-old-space-size=6144
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
