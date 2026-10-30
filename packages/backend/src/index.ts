@@ -5,6 +5,7 @@
  *
  * Happy hacking!
  */
+// cache-bust: perf-test cold-build marker
 
 import { createBackend } from '@backstage/backend-defaults';
 import { portalBackendFeatures } from '@openchoreo/backstage-portal-backend';
