@@ -55,9 +55,18 @@ jobs:
       branch-exists: ${{ steps.check-branch.outputs.branch-exists }}
       prerelease: ${{ steps.resolve-version.outputs.prerelease }}
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ secrets.OC_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OC_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
       - name: Resolve version and validate
@@ -229,9 +238,18 @@ jobs:
     if: ${{ needs.validate.outputs.branch-exists == 'false' && (github.event.inputs.action == 'full' || github.event.inputs.action == 'branch') && github.event.inputs.pre_release_id == '' }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ secrets.OC_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OC_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ needs.validate.outputs.checkout-sha }}
           fetch-depth: 0
 
@@ -260,9 +278,18 @@ jobs:
     if: ${{ always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag') }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ secrets.OC_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OC_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ needs.validate.outputs.target-commit }}
           fetch-depth: 0
 
