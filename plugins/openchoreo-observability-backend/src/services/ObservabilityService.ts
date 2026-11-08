@@ -55,6 +55,21 @@ export class ObservabilityService {
     );
   }
 
+  /**
+   * Resolves the observer URL for a platform-wide read — the audit trail,
+   * which has no environment to resolve through — as the API advertises it.
+   * `auditLogsEnabled` is `false` when the API reports the trail cannot be
+   * queried.
+   */
+  async resolvePlatformUrls(userToken?: string): Promise<{
+    observerUrl?: string;
+    auditLogsEnabled?: boolean;
+  }> {
+    const { observerUrl, auditLogsEnabled } =
+      await this.resolver.resolveForPlatform(userToken);
+    return { observerUrl, auditLogsEnabled };
+  }
+
   async getReleaseBinding(
     namespaceName: string,
     bindingName: string,

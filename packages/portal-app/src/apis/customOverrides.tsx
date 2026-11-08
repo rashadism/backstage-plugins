@@ -54,11 +54,6 @@ import {
 import { CatalogClient } from '@backstage/catalog-client';
 import { CachingCatalogApi } from '@openchoreo/backstage-plugin-react';
 import {
-  formDecoratorsApiRef,
-  DefaultScaffolderFormDecoratorsApi,
-} from '@backstage/plugin-scaffolder/alpha';
-import { FormDecoratorBlueprint } from '@backstage/plugin-scaffolder-react/alpha';
-import {
   RELATION_DEPLOYS_TO,
   RELATION_DEPLOYED_BY,
   RELATION_USES_PIPELINE,
@@ -75,9 +70,6 @@ import {
   RELATION_BUILDS,
 } from '@openchoreo/backstage-plugin-common';
 import { KIND_ICONS } from '../kindIcons';
-import { openChoreoTokenDecorator } from '../scaffolder/openChoreoTokenDecorator';
-import { LogRowActionBlueprint } from '@openchoreo/backstage-plugin-openchoreo-observability/alpha';
-import { InvestigateLogButton } from '@openchoreo/backstage-plugin-openchoreo-portal-assistant';
 
 /**
  * Override `catalog-graph`'s default `api:catalog-graph` to include the
@@ -183,7 +175,7 @@ export function createCachingCatalogApi(deps: {
  *
  * The `page:catalog/entity` chrome override that mounts `OpenChoreoEntityLayout`
  * lives in `@openchoreo/backstage-plugin/alpha` as `openChoreoEntityPageOverride`
- * and is wired into `createPortalApp`'s `features` array. Everything about the
+ * and is wired into `portalFeatures` in `../alpha`. Everything about the
  * OC entity-page chrome — compact header, styled tab bar, delete / annotation
  * context-menu extras, existence-check empty state — ships from the plugin so
  * external adopters can adopt the same look with one import.
@@ -372,20 +364,6 @@ export const customAppModule = createFrontendModule({
         }),
       },
     }),
-    // Host-injected per-row action renderer for the observability
-    // runtime-logs tables. Wires the portal-assistant's
-    // InvestigateLogButton into ObservabilityRuntimeLogs /
-    // ObservabilityProjectRuntimeLogs without coupling the
-    // observability plugin to portal-assistant. Mirrors upstream's
-    // FormDecoratorBlueprint registration pattern.
-    LogRowActionBlueprint.make({
-      name: 'investigate-log',
-      params: {
-        renderer: (log, getLogsSnapshot) => (
-          <InvestigateLogButton log={log} getLogsSnapshot={getLogsSnapshot} />
-        ),
-      },
-    }),
     // Swap Backstage's built-in `<Progress />` bar (the Suspense fallback
     // `ExtensionBoundary` renders while a lazy page/extension chunk loads) for
     // our centered PageLoader, so route transitions match the rest of the app.
@@ -430,21 +408,23 @@ export const searchPluginAlpha = searchPluginAlphaBase.withOverrides({
   ],
 });
 
-// /settings → legacy SettingsLayout chrome with three curated tabs
-// (General / Access Control / Secrets). Bypasses upstream SubPageBlueprint
-// collection.
+// /settings/general → upstream General tab plus OpenChoreo's PlatformAboutCard
+// as a fourth grid card. Access Control / Secrets tabs come from the base
+// plugin's SubPageBlueprints; Auth Providers / Feature Flags are hidden via
+// `app.extensions` in app-config.yaml.
 export const userSettingsPluginAlpha =
   userSettingsPluginAlphaBase.withOverrides({
     extensions: [
-      userSettingsPluginAlphaBase.getExtension('page:user-settings').override({
-        params: {
-          noHeader: true,
-          loader: () =>
-            import('../components/settings/OpenChoreoUserSettingsPage').then(
-              m => <m.OpenChoreoUserSettingsPage />,
-            ),
-        },
-      }),
+      userSettingsPluginAlphaBase
+        .getExtension('sub-page:user-settings/general')
+        .override({
+          params: {
+            loader: () =>
+              import('../components/settings/OpenChoreoGeneralSettings').then(
+                m => <m.OpenChoreoGeneralSettings />,
+              ),
+          },
+        }),
     ],
   });
 
@@ -469,31 +449,9 @@ export const scaffolderPluginAlpha = scaffolderPluginAlphaBase.withOverrides({
           ),
       },
     }),
-    // Inject the OpenChoreo IDP-token decorator alongside any other
-    // FormDecoratorBlueprint extensions plugins may contribute. The
-    // earlier shape (`params: defineParams => defineParams({ factory: () => create({decorators: [openChoreoTokenDecorator]}) })`)
-    // discarded `inputs.formDecorators`, silently dropping every other
-    // plugin's decorator. Using `factory(originalFactory, { inputs })`
-    // preserves the upstream accumulation and then concats ours.
-    scaffolderPluginAlphaBase
-      .getExtension('api:scaffolder/form-decorators')
-      .override({
-        factory(originalFactory, { inputs }) {
-          const contributed = inputs.formDecorators.map(e =>
-            e.get(FormDecoratorBlueprint.dataRefs.formDecoratorLoader),
-          );
-          return originalFactory({
-            params: defineParams =>
-              defineParams({
-                api: formDecoratorsApiRef,
-                deps: {},
-                factory: () =>
-                  DefaultScaffolderFormDecoratorsApi.create({
-                    decorators: [openChoreoTokenDecorator, ...contributed],
-                  }),
-              }),
-          });
-        },
-      }),
+    // (The OpenChoreo IDP-token form decorator is now shipped by
+    // `@openchoreo/backstage-plugin`'s alpha via `FormDecoratorBlueprint`.
+    // Portal-app gets it through the normal plugin channel — no override
+    // needed here. See `plugins/openchoreo/src/scaffolder/openChoreoTokenDecorator.ts`.)
   ],
 });

@@ -2,6 +2,11 @@ import { screen } from '@testing-library/react';
 import { renderInTestApp } from '@backstage/test-utils';
 import { CostInsightsPage } from './CostInsightsPage';
 
+// The line filter is covered by its own tests.
+jest.mock('../common/ReleaseLineFilter', () => ({
+  ReleaseLineFilter: () => null,
+}));
+
 // Child components are exercised by their own tests; stub them to lightweight
 // markers so this suite focuses on the page's state wiring.
 jest.mock('./CostInsightsScopeFilters', () => ({
@@ -9,7 +14,7 @@ jest.mock('./CostInsightsScopeFilters', () => ({
 }));
 jest.mock('./CostInsightsFilters', () => ({
   CostInsightsFilters: () => <div data-testid="filters" />,
-  DEFAULT_GRANULARITY: '1d',
+  DEFAULT_GRANULARITY: '1h',
 }));
 jest.mock('./CostInsightsTable', () => ({
   CostInsightsTable: () => <div data-testid="cost-table" />,
@@ -20,9 +25,11 @@ jest.mock('./CostInsightsGraphs', () => ({
 jest.mock('./ForecastDivergenceChart', () => ({
   ForecastDivergenceChart: () => <div data-testid="forecast" />,
 }));
+const mockUseCostInsightsEnabled = jest.fn();
 jest.mock('@openchoreo/backstage-plugin-react', () => ({
   ...jest.requireActual('@openchoreo/backstage-plugin-react'),
   TimeRangeFilter: () => <div data-testid="time-range" />,
+  useCostInsightsEnabled: () => mockUseCostInsightsEnabled(),
 }));
 // The Cost Analysis tab lazy-loads this; stub it so the tab can be exercised
 // without its catalog/permission dependencies.
@@ -30,10 +37,16 @@ jest.mock('../CostAnalysis', () => ({
   CostAnalysisPage: () => <div data-testid="cost-analysis" />,
 }));
 
+const mockUseResolvedScopeSelection = jest.fn();
 const mockUseNamespaceEnvironments = jest.fn();
 const mockUseDimensionTitles = jest.fn();
 const mockUseCostInsights = jest.fn();
 
+jest.mock('./useCostScopeOptions', () => ({
+  ...jest.requireActual('./useCostScopeOptions'),
+  useResolvedScopeSelection: (...args: any[]) =>
+    mockUseResolvedScopeSelection(...args),
+}));
 jest.mock('./useNamespaceEnvironments', () => ({
   useNamespaceEnvironments: (...args: any[]) =>
     mockUseNamespaceEnvironments(...args),
@@ -70,6 +83,22 @@ const data = {
 };
 
 function setupDefaults() {
+  mockUseCostInsightsEnabled.mockReturnValue(true);
+  mockUseResolvedScopeSelection.mockImplementation((selection: any) => ({
+    resolved: {
+      ...selection,
+      namespaces: selection.namespaces.length
+        ? selection.namespaces
+        : ['default', 'staging'],
+    },
+    namespaceOptions: [
+      { value: 'default', label: 'default' },
+      { value: 'staging', label: 'staging' },
+    ],
+    projectOptions: [],
+    componentOptions: [],
+    loading: false,
+  }));
   mockUseNamespaceEnvironments.mockReturnValue({
     environments: [{ name: 'dev', namespace: 'default', displayName: 'Dev' }],
     loading: false,
@@ -165,10 +194,71 @@ describe('CostInsightsPage', () => {
     expect(screen.getByText('catalog down')).toBeInTheDocument();
   });
 
+  it('scopes to every namespace when the URL names none', async () => {
+    await renderPage('/');
+    expect(mockUseNamespaceEnvironments).toHaveBeenCalledWith([
+      'default',
+      'staging',
+    ]);
+    expect(mockUseCostInsights).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'namespace',
+        scopes: [{ namespace: 'default' }, { namespace: 'staging' }],
+      }),
+    );
+  });
+
+  it('holds the page back until the namespaces are known', async () => {
+    mockUseResolvedScopeSelection.mockReturnValue({
+      resolved: { namespaces: [], projects: [], components: [] },
+      namespaceOptions: [],
+      projectOptions: [],
+      componentOptions: [],
+      loading: true,
+    });
+    await renderPage('/');
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByText(/No namespaces found/i)).not.toBeInTheDocument();
+  });
+
+  it('holds the scope back while a child tier is still resolving', async () => {
+    mockUseResolvedScopeSelection.mockReturnValue({
+      resolved: { namespaces: ['default'], projects: [], components: [] },
+      namespaceOptions: [{ value: 'default', label: 'default' }],
+      projectOptions: [],
+      componentOptions: [],
+      loading: true,
+    });
+    await renderPage('/?namespaces=default');
+    expect(mockUseCostInsights).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: [] }),
+    );
+  });
+
+  it('reports a catalog with no namespaces at all', async () => {
+    mockUseResolvedScopeSelection.mockReturnValue({
+      resolved: { namespaces: [], projects: [], components: [] },
+      namespaceOptions: [],
+      projectOptions: [],
+      componentOptions: [],
+      loading: false,
+    });
+    await renderPage('/');
+    expect(screen.getByText(/No namespaces found/i)).toBeInTheDocument();
+  });
+
   it('offers both the Insights and Analysis Reports tabs', async () => {
     await renderPage();
     expect(screen.getByText('Insights')).toBeInTheDocument();
     expect(screen.getByText('Analysis Reports')).toBeInTheDocument();
+  });
+
+  it('drops the Insights tab when cost insights is disabled', async () => {
+    mockUseCostInsightsEnabled.mockReturnValue(false);
+    await renderPage();
+    expect(screen.queryByText('Insights')).not.toBeInTheDocument();
+    expect(screen.getByText('Analysis Reports')).toBeInTheDocument();
+    expect(screen.queryByTestId('cost-table')).not.toBeInTheDocument();
   });
 
   it('prompts to pick a project on the Cost Analysis tab when none is scoped', async () => {

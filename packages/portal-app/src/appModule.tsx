@@ -6,17 +6,13 @@ import {
   AppRootWrapperBlueprint,
   IconBundleBlueprint,
   NavContentBlueprint,
-  ThemeBlueprint,
 } from '@backstage/plugin-app-react';
 import {
   EntityContentBlueprint,
   EntityContentLayoutBlueprint,
 } from '@backstage/plugin-catalog-react/alpha';
-import { AssistantDrawerProvider } from '@openchoreo/backstage-plugin-openchoreo-portal-assistant';
-import { OpenChoreoQueryProvider } from '@openchoreo/backstage-plugin-react';
 import { apis } from './apis';
 import { LEGACY_KIND_ICONS } from './kindIcons';
-import { appThemes } from './themes';
 import { PortalNavContent } from './components/Root/PortalNavContent';
 import { ScaffolderPreselectionProvider } from '@openchoreo/backstage-plugin';
 
@@ -32,32 +28,13 @@ const iconBundle = IconBundleBlueprint.make({
   params: { icons: LEGACY_KIND_ICONS },
 });
 
-const themeExtensions = appThemes.map(theme =>
-  ThemeBlueprint.make({
-    name: theme.id,
-    params: { theme },
-  }),
-);
-
 const navContent = NavContentBlueprint.make({
   params: { component: PortalNavContent },
-});
-
-// Wraps the app root so page overrides attaching under upstream plugin
-// scopes (page:catalog/entity, page:api-docs, ...) inherit query context.
-const openChoreoQueryWrapper = AppRootWrapperBlueprint.make({
-  name: 'openchoreo-query',
-  params: { component: OpenChoreoQueryProvider },
 });
 
 const scaffolderPreselectionWrapper = AppRootWrapperBlueprint.make({
   name: 'scaffolder-preselection',
   params: { component: ScaffolderPreselectionProvider },
-});
-
-const assistantDrawerWrapper = AppRootWrapperBlueprint.make({
-  name: 'assistant-drawer',
-  params: { component: AssistantDrawerProvider },
 });
 
 // Portal-only. Adopters get vanilla upstream api-docs behavior on API pages.
@@ -66,7 +43,7 @@ const apiTryOutEntityContent = EntityContentBlueprint.make({
   params: {
     path: '/try-out',
     title: 'Try Out',
-    group: 'runtime',
+    group: 'api-try-out',
     filter: { kind: 'api' },
     loader: () =>
       import('@openchoreo/backstage-plugin').then(m => <m.ApiTryOut />),
@@ -90,11 +67,8 @@ export const appModule = createFrontendModule({
   extensions: [
     ...apiExtensions,
     iconBundle,
-    ...themeExtensions,
     navContent,
-    openChoreoQueryWrapper,
     scaffolderPreselectionWrapper,
-    assistantDrawerWrapper,
     apiTryOutEntityContent,
     apiOverviewLayout,
   ],

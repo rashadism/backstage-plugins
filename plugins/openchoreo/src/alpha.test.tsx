@@ -1,19 +1,26 @@
-import openchoreoPlugin from './alpha';
+import openchoreoAlpha, { openChoreoPlugin as openchoreoPlugin } from './alpha';
 
 const ALPHA_EXTENSION_NAMES = [
   // backend client
   ['api', 'open-choreo-client'],
-  // OpenChoreo IDP auth (fetch/permission overrides live in openChoreoAppModule)
+  // OpenChoreo IDP auth (the permission override lives in openChoreoAppModule)
   ['api', 'openchoreo-auth'],
+  // user token capability + the OpenChoreo-scoped fetch API built on it
+  ['api', 'openchoreo-token'],
+  ['api', 'openchoreo-fetch'],
   // self-contained response-cache provider
   ['plugin-wrapper', 'query-provider'],
-  // routed page (opened via window.open from the resource drawer)
+  // routed pages
   ['page', 'exec-terminal'],
+  // settings tabs contributed to upstream's user-settings page
+  ['sub-page', 'access-control'],
+  ['sub-page', 'secrets'],
   // entity context menu items (delete + annotation edit)
   ['entity-context-menu-item', 'delete-entity'],
   ['entity-context-menu-item', 'edit-annotations'],
   // shared
   ['entity-content', 'resource-definition'],
+  ['entity-content', 'release-line-definition'],
   // component-page
   ['entity-content', 'component-deploy'],
   ['entity-card', 'deployment-status'],
@@ -25,6 +32,7 @@ const ALPHA_EXTENSION_NAMES = [
   ['entity-card', 'project-contents'],
   ['entity-card', 'deployment-pipeline'],
   // domain-page
+  ['entity-content', 'namespace-cell-diagram'],
   ['entity-card', 'namespace-projects'],
   ['entity-card', 'namespace-resources'],
   // managed resource
@@ -52,6 +60,7 @@ const ALPHA_EXTENSION_NAMES = [
   ['entity-card', 'observability-plane-linked-planes'],
   ['entity-card', 'cluster-observability-plane-status'],
   ['entity-card', 'cluster-observability-plane-linked-planes'],
+  ['entity-card', 'notification-channel-config'],
   // deployment pipeline
   ['entity-card', 'deployment-pipeline-visualization'],
   ['entity-card', 'promotion-paths'],
@@ -63,6 +72,8 @@ const ALPHA_EXTENSION_NAMES = [
   ['entity-card', 'workflow-overview'],
   ['entity-card', 'component-workflow-overview'],
   // scaffolder form fields
+  // Injects the signed-in user's OpenChoreo IDP token as a template secret.
+  ['scaffolder-form-decorator', 'openchoreo-user-token'],
   ['scaffolder-form-field', 'advanced-configuration-field'],
   ['scaffolder-form-field', 'build-and-deploy-field'],
   ['scaffolder-form-field', 'build-template-parameters'],
@@ -97,6 +108,7 @@ const ALPHA_EXTENSION_NAMES = [
   ['scaffolder-form-field', 'workload-details-field'],
   // per-kind Overview layouts
   ['entity-content-layout', 'component-overview'],
+  ['entity-content-layout', 'release-line-overview'],
   ['entity-content-layout', 'system-overview'],
   ['entity-content-layout', 'domain-overview'],
   ['entity-content-layout', 'resource-overview'],
@@ -107,6 +119,7 @@ const ALPHA_EXTENSION_NAMES = [
   ['entity-content-layout', 'cluster-workflow-plane-overview'],
   ['entity-content-layout', 'observability-plane-overview'],
   ['entity-content-layout', 'cluster-observability-plane-overview'],
+  ['entity-content-layout', 'notification-channel-overview'],
   ['entity-content-layout', 'deployment-pipeline-overview'],
   ['entity-content-layout', 'component-type-overview'],
   ['entity-content-layout', 'resource-type-overview'],
@@ -136,5 +149,28 @@ describe('openchoreo alpha plugin', () => {
   it('exposes one extension per documented entry (no silent drops)', () => {
     const extensions = (openchoreoPlugin as any).extensions as Array<unknown>;
     expect(extensions).toHaveLength(ALPHA_EXTENSION_NAMES.length);
+  });
+});
+
+describe('openchoreo alpha default export', () => {
+  it('is a feature loader, so discovery picks up the modules too', () => {
+    expect((openchoreoAlpha as any).$$type).toBe(
+      '@backstage/FrontendFeatureLoader',
+    );
+  });
+
+  it('loads the plugin plus the app module it depends on', async () => {
+    const loaded = await (openchoreoAlpha as any).loader({
+      config: { getOptionalString: () => undefined },
+    });
+
+    expect(loaded).toContain(openchoreoPlugin);
+    expect(loaded).toHaveLength(2);
+
+    const types = loaded.map((f: any) => f.$$type);
+    expect(types).toEqual([
+      '@backstage/FrontendPlugin',
+      '@backstage/FrontendModule',
+    ]);
   });
 });

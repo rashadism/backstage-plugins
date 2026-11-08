@@ -1,8 +1,5 @@
-import {
-  useApi,
-  discoveryApiRef,
-  fetchApiRef,
-} from '@backstage/core-plugin-api';
+import { useApi, discoveryApiRef } from '@backstage/core-plugin-api';
+import { openChoreoFetchApiRef } from '@openchoreo/backstage-plugin-react';
 import {
   useOpenChoreoQuery,
   calculateTimeRange,
@@ -12,6 +9,7 @@ import type { CostItem, CostRecommendationItem } from '../../types';
 import { buildCostInsightsData } from './costAggregation';
 import { fetchBindingInfoByEnv, normalizeEnv } from './optimizeChange';
 import type { CostInsightsData, CostScope, CostScopeLevel } from './types';
+import { useSelectedReleaseLine } from '../../hooks/useSelectedReleaseLine';
 
 export interface UseCostInsightsParams {
   /** Atomic scopes to query (one per selected item at `level`). */
@@ -55,7 +53,7 @@ export function useCostInsights(
 ): UseCostInsightsResult {
   const api = useApi(observabilityApiRef);
   const discovery = useApi(discoveryApiRef);
-  const fetchApi = useApi(fetchApiRef);
+  const fetchApi = useApi(openChoreoFetchApiRef);
   const { scopes, level, environments, timeRange, granularity } = params;
   const summaryOnly = params.summaryOnly ?? false;
   // Dedupe so a repeated env or scope can't fan out duplicate requests and
@@ -65,6 +63,12 @@ export function useCostInsights(
   const sortedScopeKeys = uniqueScopes.map(scopeKey).sort();
 
   const enabled = uniqueScopes.length > 0 && sortedEnvs.length > 0;
+  // A release line narrows a single component in scope.
+  const selectedLine = useSelectedReleaseLine();
+  const releaseLine =
+    uniqueScopes.length === 1 && uniqueScopes[0].component
+      ? selectedLine
+      : undefined;
 
   const { data, loading, isRefetching, error, refetch } =
     useOpenChoreoQuery<CostInsightsData>(
@@ -78,6 +82,7 @@ export function useCostInsights(
         params.customEndTime ?? '',
         granularity,
         summaryOnly ? 'summary' : 'full',
+        releaseLine ?? '',
       ],
       async () => {
         const { startTime, endTime } = calculateTimeRange(timeRange, {
@@ -111,67 +116,79 @@ export function useCostInsights(
             const scopeOpts = {
               project: scope.project,
               component: scope.component,
+              releaseLine,
             };
-            // Accumulated cost drives rows/summary/scatter/saving in both views
-            // and shares the recommendation's (non-bucketed) pricing basis.
-            const current = await api.getCosts(ns, env, {
-              ...scopeOpts,
-              startTime,
-              endTime,
+            const noCosts = () => ({ items: [] as CostItem[] });
+            const noRecommendations = () => ({
+              items: [] as CostRecommendationItem[],
             });
-            // Time-bucketed cost drives the graph's time-series charts; its
-            // per-bucket totals need not sum to the accumulated total. Degrade
-            // gracefully: a series failure shouldn't drop the request's data.
-            // The summary-only card skips all of these.
-            const series = summaryOnly
-              ? { items: [] as CostItem[] }
-              : await api
-                  .getCosts(ns, env, {
-                    ...scopeOpts,
-                    startTime,
-                    endTime,
-                    granularity,
-                  })
-                  .catch(() => ({ items: [] as CostItem[] }));
-            // Month-to-date daily cost for the forecast chart
-            const monthToDate = summaryOnly
-              ? { items: [] as CostItem[] }
-              : await api
-                  .getCosts(ns, env, {
-                    ...scopeOpts,
-                    startTime: monthStartIso,
-                    endTime: nowIso,
-                    granularity: '1d',
-                  })
-                  .catch(() => ({ items: [] as CostItem[] }));
-            // Month-to-date recommendations drive the forecast's "if applied"
-            // curve: the saving rate is measured over month start to now, then
-            // extrapolated to month end (same window as the actual curve).
-            const monthToDateRecommendations = summaryOnly
-              ? { items: [] as CostRecommendationItem[] }
-              : await api
-                  .getCostRecommendations(ns, env, {
-                    ...scopeOpts,
-                    startTime: monthStartIso,
-                    endTime: nowIso,
-                  })
-                  .catch(() => ({ items: [] as CostRecommendationItem[] }));
-            const previous = await api.getCosts(ns, env, {
-              ...scopeOpts,
-              startTime: prevStart,
-              endTime: prevEnd,
-            });
-            // Degrade gracefully: a recommendation failure shouldn't drop the
-            // request's cost data with it.
-            const recommendations = summaryOnly
-              ? { items: [] as CostRecommendationItem[] }
-              : await api
-                  .getCostRecommendations(ns, env, {
-                    ...scopeOpts,
-                    startTime,
-                    endTime,
-                  })
-                  .catch(() => ({ items: [] as CostRecommendationItem[] }));
+            // None of the six requests depend on each other, so run them in parallel
+            const [
+              current,
+              series,
+              monthToDate,
+              monthToDateRecommendations,
+              previous,
+              recommendations,
+            ] = await Promise.all([
+              // Accumulated cost drives rows/summary/scatter/saving in both
+              // views and shares the recommendation's (non-bucketed) pricing
+              // basis.
+              api.getCosts(ns, env, { ...scopeOpts, startTime, endTime }),
+              // Time-bucketed cost drives the graph's time-series charts; its
+              // per-bucket totals need not sum to the accumulated total. Degrade
+              // gracefully: a series failure shouldn't drop the request's data.
+              // The summary-only card skips all of these.
+              summaryOnly
+                ? noCosts()
+                : api
+                    .getCosts(ns, env, {
+                      ...scopeOpts,
+                      startTime,
+                      endTime,
+                      granularity,
+                    })
+                    .catch(noCosts),
+              // Month-to-date daily cost for the forecast chart
+              summaryOnly
+                ? noCosts()
+                : api
+                    .getCosts(ns, env, {
+                      ...scopeOpts,
+                      startTime: monthStartIso,
+                      endTime: nowIso,
+                      granularity: '1d',
+                    })
+                    .catch(noCosts),
+              // Month-to-date recommendations drive the forecast's "if applied"
+              // curve: the saving rate is measured over month start to now, then
+              // extrapolated to month end (same window as the actual curve).
+              summaryOnly
+                ? noRecommendations()
+                : api
+                    .getCostRecommendations(ns, env, {
+                      ...scopeOpts,
+                      startTime: monthStartIso,
+                      endTime: nowIso,
+                    })
+                    .catch(noRecommendations),
+              api.getCosts(ns, env, {
+                ...scopeOpts,
+                startTime: prevStart,
+                endTime: prevEnd,
+              }),
+              // Degrade gracefully: a recommendation failure shouldn't drop the
+              // request's cost data with it.
+              summaryOnly
+                ? noRecommendations()
+                : api
+                    .getCostRecommendations(ns, env, {
+                      ...scopeOpts,
+                      startTime,
+                      endTime,
+                    })
+                    .catch(noRecommendations),
+            ]);
             return {
               current: current.items,
               series: series.items,
@@ -239,6 +256,7 @@ export function useCostInsights(
             namespaceName: singleComponent.namespace!,
             projectName: singleComponent.project!,
             componentName: singleComponent.component!,
+            releaseLine,
           });
           const windowStartMs = new Date(startTime).getTime();
           // Buffer so the settling period right after a spec change (pods rolling

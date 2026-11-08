@@ -74,7 +74,7 @@ If you're running OpenChoreo locally and want to connect Backstage (running at l
 **Note:** The following steps are for the [single cluster setup](https://openchoreo.dev/docs/getting-started/try-it-out/on-your-environment/).
 
 ```bash
-helm upgrade openchoreo-control-plane oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
+helm upgrade openchoreo-control-plane oci://cr.openchoreo.dev/openchoreo/helm-charts/openchoreo-control-plane \
   --version 0.0.0-latest-dev \
   --namespace openchoreo-control-plane \
   --reuse-values \
@@ -98,7 +98,7 @@ When running Backstage locally with `yarn start`, the OpenChoreo event-forwarder
 To point the event-forwarder at your local Backstage:
 
 ```bash
-helm upgrade openchoreo-control-plane oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
+helm upgrade openchoreo-control-plane oci://cr.openchoreo.dev/openchoreo/helm-charts/openchoreo-control-plane \
   --version 0.0.0-latest-dev \
   --namespace openchoreo-control-plane \
   --reuse-values \
@@ -219,6 +219,23 @@ For day-to-day development commands (test, lint, build, plugin development workf
 - **`@openchoreo/backstage-design-system`** - Design system primitives
 - **`@openchoreo/backstage-plugin-catalog-backend-module`** - Catalog entity provider
 - **`@openchoreo/backstage-plugin-scaffolder-backend-module`** - Scaffolder actions
+- **`@openchoreo/backstage-portal-app`** - The complete portal frontend shell (`createPortalApp`)
+- **`@openchoreo/backstage-portal-backend`** - The complete portal backend (`portalBackendFeatures`)
+- **`@openchoreo/create-portal`** - CLI that scaffolds a custom portal on the two packages above
+
+## Building a Custom Portal
+
+To run your own OpenChoreo Portal — your plugins, pages, and branding on top
+of the full OpenChoreo experience — scaffold one instead of forking this repo:
+
+```bash
+npx @openchoreo/create-portal
+```
+
+The result is a standard Backstage app pinned to one OpenChoreo release,
+with a Dockerfile whose image drops into the OpenChoreo Helm chart in place of
+the stock portal. See [`packages/create-portal`](packages/create-portal/README.md)
+and [`packages/portal-app`](packages/portal-app/README.md) for details.
 
 ## Installation
 
@@ -243,6 +260,22 @@ yarn workspace backend add \
 ```
 
 See the [installation guide](https://openchoreo.dev/docs/platform-engineer-guide/backstage-plugins/installing-into-existing-backstage/) for the full wiring, including the optional tab packs.
+
+The backend packages also work under Backstage's backend feature discovery. Opting in takes two things — `backend.add(discoveryFeatureLoader)` in `packages/backend/src/index.ts`, **and** `backend.packages` in your config. The loader returns nothing at all when that config key is absent, so adding it alone is silently inert:
+
+```yaml title="app-config.yaml"
+backend:
+  packages: all
+  # Or restrict it explicitly:
+  # packages:
+  #   include:
+  #     - '@openchoreo/backstage-plugin-backend'
+  #     - '@openchoreo/backstage-plugin-catalog-backend-module'
+```
+
+Each package's default export carries everything that package contributes — for the catalog module that includes the `AnnotationStore` and `ImmediateCatalogService` factories that `@openchoreo/backstage-plugin-backend` depends on. Adding any of them explicitly as well is safe: an explicitly installed service factory takes precedence over one offered by a loader.
+
+Two further notes if you turn discovery on. Discovery does not cover the root HTTP router, so the IDP token middleware still has to be wired by hand. And with `packages: all` you must drop or exclude `@backstage/plugin-permission-backend-module-allow-all-policy`, or the backend fails to start with `Policy already set` once the OpenChoreo policy is discovered alongside it.
 
 Releases from `1.3.0` onward are published from CI using [npm trusted publishing](https://docs.npmjs.com/trusted-publishers) and carry a signed [provenance attestation](https://docs.npmjs.com/generating-provenance-statements) linking the tarball to the workflow run that built it.
 
@@ -284,7 +317,16 @@ const app = createApp({
 });
 ```
 
-If you want the entire OpenChoreo portal (custom pages, sign-in, catalog view, everything), install `@openchoreo/backstage-portal-app` instead — that package composes all of the above plus a lot more:
+[Feature discovery](https://backstage.io/docs/frontend-system/building-apps/installing-plugins) — `app.packages: all`, the default in new apps — works too: adding the package as a dependency is enough. The `/alpha` default export is a feature loader carrying both the plugin and the `openChoreoAppModule` it depends on, so discovery cannot pick up one without the other. Add `openChoreoEntityGroupsModule` explicitly if you want OpenChoreo's canonical entity tab order.
+
+If you want the entire OpenChoreo portal (custom pages, sign-in, catalog view, everything), install `@openchoreo/backstage-portal-app` instead — that package composes all of the above plus a lot more. Its `/alpha` default export is a feature loader too, so with discovery on, the dependency is the whole installation:
+
+```yaml
+app:
+  packages: all
+```
+
+Or call it directly, if you would rather not configure anything:
 
 ```ts
 import { createPortalApp } from '@openchoreo/backstage-portal-app';
@@ -300,6 +342,38 @@ Installing `@openchoreo/backstage-plugin` (and the sibling plugins for CI / obse
 - **Per-kind Overview layouts** (`EntityContentLayoutBlueprint`) — 18 bespoke grids that arrange the cards in the same positions as the portal. Component, System (Project), Domain (Namespace), managed Resource, Environment, Dataplane / ClusterDataplane, WorkflowPlane / Cluster, ObservabilityPlane / Cluster, DeploymentPipeline, and every Type / Workflow family kind get a bespoke layout; upstream kinds (User, Group, API, vanilla Resource) fall back to Backstage's default 2-column info/content grid
 - **Context menu items** (`EntityContextMenuItemBlueprint`) — permission-gated "Delete" and "Edit annotations" entries in the entity's `...` menu
 - **The `OpenChoreoAboutCard` + `ContainedCatalogGraphCard`** components, exposed as regular React exports for direct use if you compose your own layouts
+- **Themes** (`ThemeBlueprint`) — the OpenChoreo light and dark themes, added to your theme picker alongside your own (see below)
+
+### Themes and branding
+
+`@openchoreo/backstage-plugin` registers two themes, `openchoreo-light` and `openchoreo-dark`. They appear in Settings next to whatever themes your app already has, and the OpenChoreo cards and tabs are designed against their palette — under the stock Backstage themes some surfaces lose contrast, and dark mode paints the page background grey.
+
+To make one of them the only choice, switch the upstream pair off:
+
+```yaml
+app:
+  extensions:
+    - theme:app/light: false
+    - theme:app/dark: false
+```
+
+To keep your own themes and drop ours, do the inverse with `theme:app/openchoreo-light` and `theme:app/openchoreo-dark`.
+
+A brand accent recolors the primary palette, links, selection, header gradients, and graph accents in whichever of the two themes is active:
+
+```yaml
+app:
+  branding:
+    theme:
+      light:
+        primaryColor: '#0d9488'
+      dark:
+        primaryColor: '#2dd4bf'
+```
+
+Hex with a leading `#`, or fully-opaque comma-separated `rgb()`/`rgba()`/`hsl()`/`hsla()`. Named colors, space-separated CSS4 syntax, and alpha below 1 are ignored with a console warning, which leaves the stock palette in place. Parts of the accent render as text, so prefer at least 4.5:1 against the page background; lower-contrast values log a warning.
+
+The sibling keys `app.branding.name`, `iconLogo`, and `fullLogo` only drive the OpenChoreo portal's sidebar and sign-in card. They do nothing in an app with its own shell.
 
 ### Entity page chrome
 
@@ -481,7 +555,7 @@ eventForwarder:
 
 **Production (Helm):**
 
-The Helm chart injects this environment variable. You can configure it via Helm values:
+The Helm chart injects the wirelogs environment variable. You can configure it via Helm values:
 
 ```yaml
 backstage:

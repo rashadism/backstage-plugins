@@ -1,3 +1,5 @@
+import { createElement, type ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useApi } from '@backstage/core-plugin-api';
 import { createQueryWrapper } from '@openchoreo/test-utils';
@@ -69,6 +71,28 @@ describe('useCostInsights', () => {
     });
     getCosts.mockResolvedValue({ items: [costItem()] });
     getCostRecommendations.mockResolvedValue({ items: [] });
+  });
+
+  it("issues a pair's six requests together rather than in a chain", async () => {
+    const release: Array<() => void> = [];
+    const hold = () =>
+      new Promise(resolve => {
+        release.push(() => resolve({ items: [] }));
+      });
+    getCosts.mockImplementation(hold);
+    getCostRecommendations.mockImplementation(hold);
+
+    const { result } = renderHook(() => useCostInsights(baseParams()), {
+      wrapper: createQueryWrapper(),
+    });
+
+    // Four cost windows and two recommendation windows, all in flight at once:
+    // none of them resolves until the test lets them.
+    await waitFor(() => expect(getCosts).toHaveBeenCalledTimes(4));
+    expect(getCostRecommendations).toHaveBeenCalledTimes(2);
+
+    release.forEach(resolve => resolve());
+    await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   it('fetches a current and previous window per environment and aggregates', async () => {
@@ -219,6 +243,47 @@ describe('useCostInsights', () => {
     expect(devRow?.recommendationStale).toBe(true);
     expect(devRow?.recommendationStaleSince).toBe('2026-07-02T00:00:00.000Z');
     expect(devRow?.recommendation).toBeUndefined();
+  });
+
+  it('reads the live spec values of the selected release line', async () => {
+    getCostRecommendations.mockResolvedValue({
+      items: [
+        {
+          component: 'comp',
+          environment: 'dev',
+          project: 'gcp',
+          namespace: 'default',
+          current: { cpuCost: 22, memoryCost: 0, cpuRequest: '100m' },
+          recommendation: { cpuCost: 5, memoryCost: 3, cpuRequest: '50m' },
+        },
+      ],
+    });
+    const QueryWrapper = createQueryWrapper();
+    const { result } = renderHook(
+      () =>
+        useCostInsights(
+          baseParams({
+            scopes: [
+              { namespace: 'default', project: 'gcp', component: 'comp' },
+            ],
+            level: 'component',
+            environments: ['dev'],
+          }),
+        ),
+      {
+        wrapper: ({ children }: { children: ReactNode }) =>
+          createElement(
+            MemoryRouter,
+            { initialEntries: ['/?releaseLine=next'] },
+            createElement(QueryWrapper, null, children),
+          ),
+      },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mockFetchBindingInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ componentName: 'comp', releaseLine: 'next' }),
+    );
   });
 
   it('overrides the recommendation current request with live spec values', async () => {

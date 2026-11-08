@@ -17,9 +17,17 @@ import {
   RefreshOverlay,
 } from '@openchoreo/backstage-design-system';
 import { CHOREO_ANNOTATIONS } from '@openchoreo/backstage-plugin-common';
-import { TimeRangeFilter } from '@openchoreo/backstage-plugin-react';
+import {
+  TimeRangeFilter,
+  useCostInsightsEnabled,
+} from '@openchoreo/backstage-plugin-react';
 import { parseUrlTimeRange, writeUrlTimeRange } from '../../utils/urlTimeRange';
 import { CostInsightsScopeFilters } from './CostInsightsScopeFilters';
+import {
+  componentValue,
+  projectValue,
+  useResolvedScopeSelection,
+} from './useCostScopeOptions';
 import { expandSelection } from './costAggregation';
 import {
   CostInsightsFilters,
@@ -36,6 +44,7 @@ import type {
   CostProjectRef,
   CostScopeSelection,
 } from './types';
+import { ReleaseLineFilter } from '../common';
 
 // Cost Analysis is a heavier feature (report views, FinOps chat). Load it lazily
 // so it only enters the bundle when the Cost Analysis tab is opened.
@@ -43,8 +52,7 @@ const CostAnalysisPage = lazy(() =>
   import('../CostAnalysis').then(m => ({ default: m.CostAnalysisPage })),
 );
 
-const DEFAULT_NAMESPACE = 'default';
-const COST_DEFAULT_TIME_RANGE = '1h';
+const COST_DEFAULT_TIME_RANGE = '24h';
 const COST_INSIGHTS_PATH = '/cost-insights';
 
 // The catalog kind each table row maps to, so we reuse the app's registered
@@ -87,10 +95,6 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
-const projectValue = (p: CostProjectRef) => `${p.namespace}/${p.name}`;
-const componentValue = (c: CostComponentRef) =>
-  `${c.namespace}/${c.project}/${c.name}`;
-
 // The API's component-scoped "not enabled" message is wrong for this
 // platform-level feature.
 function friendlyCostError(message: string): string {
@@ -103,7 +107,7 @@ function friendlyCostError(message: string): string {
  * Parse the multi-select scope from the URL. Reads the plural params
  * (`namespaces`/`projects`/`components`) and falls back to the legacy singular
  * params (`namespace`/`project`/`component`) so existing deep links still land
- * on the right scope. An absent namespace defaults to `default`.
+ * on the right scope. An empty tier means every item in it.
  */
 function parseSelection(params: URLSearchParams): CostScopeSelection {
   const nsRaw = params.get('namespaces');
@@ -111,7 +115,7 @@ function parseSelection(params: URLSearchParams): CostScopeSelection {
   let namespaces: string[];
   if (nsRaw !== null) namespaces = nsRaw.split(',').filter(Boolean);
   else if (legacyNs) namespaces = [legacyNs];
-  else namespaces = [DEFAULT_NAMESPACE];
+  else namespaces = [];
 
   const projRaw = params.get('projects');
   const legacyProj = params.get('project');
@@ -161,7 +165,11 @@ function writeSelection(params: URLSearchParams, sel: CostScopeSelection) {
   params.delete('namespace');
   params.delete('project');
   params.delete('component');
-  params.set('namespaces', sel.namespaces.join(','));
+  if (sel.namespaces.length) {
+    params.set('namespaces', sel.namespaces.join(','));
+  } else {
+    params.delete('namespaces');
+  }
   if (sel.projects.length) {
     params.set('projects', sel.projects.map(projectValue).join(','));
   } else {
@@ -214,7 +222,13 @@ const CostInsightsInsightsTab = () => {
   const app = useApp();
   const { selection, update, searchParams } = useCostSelection();
 
-  const { level, scopes } = expandSelection(selection);
+  // Resolved against the catalog so the scope matches what the dropdowns show.
+  const { resolved, loading: scopeLoading } =
+    useResolvedScopeSelection(selection);
+  const { level, scopes: resolvedScopes } = expandSelection(resolved);
+  // A half-resolved selection would query the parent scope and be superseded
+  // the moment a child tier's options land, so hold until the scope settles.
+  const scopes = scopeLoading ? [] : resolvedScopes;
   // Raw dimension name to catalog title, so rows read "GCP Microservice Demo".
   const titles = useDimensionTitles(level, scopes);
 
@@ -236,7 +250,7 @@ const CostInsightsInsightsTab = () => {
     environments,
     loading: envsLoading,
     error: envsError,
-  } = useNamespaceEnvironments(selection.namespaces);
+  } = useNamespaceEnvironments(resolved.namespaces);
 
   // Default to every environment until the user narrows the selection, so the
   // page shows aggregated data immediately.
@@ -300,7 +314,7 @@ const CostInsightsInsightsTab = () => {
   const optimizeScope =
     level === 'component' && scopes.length === 1 ? scopes[0] : undefined;
 
-  const noScope = scopes.length === 0;
+  const noScope = !scopeLoading && scopes.length === 0;
   const noEnvironments =
     !noScope && !envsLoading && !envsError && environments.length === 0;
 
@@ -316,12 +330,16 @@ const CostInsightsInsightsTab = () => {
           refreshing={loading || isRefetching}
           disabled={noScope}
         />
+        <ReleaseLineFilter
+          namespace={optimizeScope?.namespace}
+          component={optimizeScope?.component}
+        />
       </Box>
 
       {noScope && (
         <Box className={classes.section}>
           <Alert severity="info">
-            Select one or more namespaces to view cost insights.
+            No namespaces found to show cost insights for.
           </Alert>
         </Box>
       )}
@@ -357,7 +375,7 @@ const CostInsightsInsightsTab = () => {
         </Box>
       )}
 
-      {loading && <PageLoader />}
+      {(loading || scopeLoading) && <PageLoader />}
 
       {!loading && data && (
         <Box position="relative">
@@ -417,9 +435,10 @@ const CostInsightsInsightsTab = () => {
 const CostAnalysisTab = () => {
   const classes = useStyles();
   const { selection } = useCostSelection();
+  const { resolved } = useResolvedScopeSelection(selection);
 
   const project =
-    selection.projects.length === 1 ? selection.projects[0] : undefined;
+    resolved.projects.length === 1 ? resolved.projects[0] : undefined;
 
   const syntheticEntity: Entity | undefined = useMemo(
     () =>
@@ -465,23 +484,31 @@ const CostAnalysisTab = () => {
 const CostInsightsTabBar = () => {
   const classes = useStyles();
   const location = useLocation();
-  const onCostAnalysis = location.pathname.endsWith('/cost-analysis');
+  const costInsightsEnabled = useCostInsightsEnabled();
+  const analysisPath = `${COST_INSIGHTS_PATH}/cost-analysis`;
+  // Gated off, the index renders Analysis Reports too, so it is always current.
+  const onCostAnalysis =
+    !costInsightsEnabled ||
+    location.pathname === analysisPath ||
+    location.pathname.startsWith(`${analysisPath}/`);
   const tabClass = (active: boolean) =>
     active ? `${classes.tab} ${classes.tabActive}` : classes.tab;
 
   return (
     <Box className={classes.tabBar} role="tablist">
-      <RouterLink
-        to={{ pathname: COST_INSIGHTS_PATH, search: location.search }}
-        className={tabClass(!onCostAnalysis)}
-        role="tab"
-        aria-selected={!onCostAnalysis}
-      >
-        Insights
-      </RouterLink>
+      {costInsightsEnabled && (
+        <RouterLink
+          to={{ pathname: COST_INSIGHTS_PATH, search: location.search }}
+          className={tabClass(!onCostAnalysis)}
+          role="tab"
+          aria-selected={!onCostAnalysis}
+        >
+          Insights
+        </RouterLink>
+      )}
       <RouterLink
         to={{
-          pathname: `${COST_INSIGHTS_PATH}/cost-analysis`,
+          pathname: analysisPath,
           search: location.search,
         }}
         className={tabClass(onCostAnalysis)}
@@ -496,6 +523,7 @@ const CostInsightsTabBar = () => {
 
 export const CostInsightsPage = () => {
   const { selection, setSelection } = useCostSelection();
+  const costInsightsEnabled = useCostInsightsEnabled();
 
   return (
     <Page themeId="tool">
@@ -507,8 +535,17 @@ export const CostInsightsPage = () => {
         />
         <CostInsightsTabBar />
         <Routes>
-          <Route index element={<CostInsightsInsightsTab />} />
-          <Route path="cost-analysis" element={<CostAnalysisTab />} />
+          <Route
+            index
+            element={
+              costInsightsEnabled ? (
+                <CostInsightsInsightsTab />
+              ) : (
+                <CostAnalysisTab />
+              )
+            }
+          />
+          <Route path="cost-analysis/*" element={<CostAnalysisTab />} />
         </Routes>
       </Content>
     </Page>

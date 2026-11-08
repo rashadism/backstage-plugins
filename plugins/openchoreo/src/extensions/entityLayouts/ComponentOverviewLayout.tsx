@@ -1,6 +1,10 @@
 import Grid from '@material-ui/core/Grid';
 import type { EntityContentLayoutProps } from '@backstage/plugin-catalog-react/alpha';
-import { FeatureGate } from '@openchoreo/backstage-plugin-react';
+import { useEntity } from '@backstage/plugin-catalog-react';
+import {
+  BuildFailureNotifierSlot,
+  FeatureGate,
+} from '@openchoreo/backstage-plugin-react';
 import {
   WorkflowsOverviewCard,
   DeploymentStatusCard,
@@ -10,22 +14,33 @@ import { EntityWarningStrip } from './EntityWarningStrip';
 import { OpenChoreoAboutCard } from '../../components/OpenChoreoAboutCard';
 import { ContainedCatalogGraphCard } from '../../components/ContainedCatalogGraphCard';
 import { ForeignCardsSection } from './foreignCards';
+import {
+  ReleaseLinesCard,
+  useHasReleaseLines,
+} from '../../components/ReleaseLines';
 
 /**
- * The Component-kind Overview layout. The portal separately overlays
- * `FailedBuildSnackbar` (private `openchoreo-portal-assistant` plugin,
- * not shipped to adopters) and `WorkflowsOrExternalCICard` (portal-only
- * adapter over Jenkins/GitHub Actions/GitLab) at the app layer; adopters
- * get the plain `WorkflowsOverviewCard` here. Both are opt-in
- * customizations rather than portal defaults, applied via the portal's
- * thin `page:catalog/entity` override.
+ * The Component-kind Overview layout. A component with release lines lists
+ * its lines first, and its summary cards work on the main line, as its tabs do.
+ * `BuildFailureNotifierSlot` renders the host app's assistant prompt for a
+ * failed build run (nothing when no assistant integration is registered — the
+ * stock portal's is private and not shipped to adopters).
  */
 export default function ComponentOverviewLayout({
   cards,
 }: EntityContentLayoutProps) {
+  const { entity } = useEntity();
+  const { hasLines } = useHasReleaseLines(entity);
+
   return (
     <Grid container spacing={3} alignItems="stretch">
+      <BuildFailureNotifierSlot />
       <EntityWarningStrip />
+      {hasLines && (
+        <Grid item xs={12}>
+          <ReleaseLinesCard />
+        </Grid>
+      )}
       <Grid item md={4} xs={12}>
         <WorkflowsOverviewCard />
       </Grid>
