@@ -170,6 +170,7 @@ jobs:
     needs: [lint, audit, test, build]
     permissions:
       packages: write
+      contents: read
     uses: ./.github/workflows/publish-candidates.yml
     secrets:
       OCI_REGISTRY_USERNAME: ${{ secrets.OCI_REGISTRY_USERNAME }}
